@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <title>Schedule Master</title>
+        <link rel="stylesheet" href="style.css">
+    </head>
+    <body>
+        <div id="app"  v-on:mouseup="updateWorkOnClickUp($event)">
+
+            <div id="loading-screen" v-if="!loaded"></div>
+            
+            <!-- =========== LOGIN =========== -->
+
+            <div id="login-screen" v-if="state.showLoginScreen">
+                <div v-show="!state.showRegisterForm" id="login-area">
+                    <div id="login-header">Schedule Master</div>
+
+                    <div id="email-label" class="login-label">Email</div>
+                    <input id="email-input" class="login-input" v-model="emailInput" v-on:keydown.enter="attemptLogIn" v-bind:class="{ 'error-border' : loginErrors.unauthorized }"> 
+                    <div id="password-label" class="login-label password">Password</div>
+                    <input id="password-input" type="password" class="login-input" v-model="passwordInput" v-on:keydown.enter="attemptLogIn" v-bind:class="{ 'error-border' : loginErrors.unauthorized }">
+                    <div class="login-error">{{ loginErrors.unauthorized }}</div>
+                    <button id="login-button" v-bind:disabled="!emailInput || !passwordInput" v-on:click="attemptLogIn">Log In</button>
+                    <div id="register-text">Don't have an account? <i v-on:click="setStateToRegister()">Register here.</i></div>
+                </div>
+                <div v-show="state.showRegisterForm" id="register-area">
+                    <div id="register-header">Schedule Master</div>
+
+                    <div id="email-label-register" class="register-label">Email*</div>
+                    <input id="email-input-register" class="register-input" v-model="emailInput" v-on:keydown.enter="attemptRegister" v-bind:class="{ 'error-border' : registerErrors.email }"> 
+                    <div class="register-error">{{ registerErrors.email }}</div>
+                    <div id="firstname-label" class="register-label password">First Name*</div>
+                    <input id="firstname-input" class="register-input" v-model="firstNameInput" v-on:keydown.enter="attemptRegister" v-bind:class="{ 'error-border' : registerErrors.firstName }">
+                    <div class="register-error">{{ registerErrors.firstName }}</div>
+                    <div id="lastname-label" class="register-label password">Last Name*</div>
+                    <input id="lastname-input" class="register-input" v-model="lastNameInput" v-on:keydown.enter="attemptRegister" v-bind:class="{ 'error-border' : registerErrors.lastName }">
+                    <div class="register-error">{{ registerErrors.lastName }}</div>
+                    <div id="password-label-register" class="register-label password">Password*</div>
+                    <input id="password-input-register" type="password" class="register-input" v-model="passwordInput" v-on:keydown.enter="attemptRegister" v-bind:class="{ 'error-border' : registerErrors.password }">
+                    <div class="register-error">{{ registerErrors.password }}</div>
+                    
+                    <button id="register-button" v-on:click="attemptRegister">Register Account</button>
+                    <div id="login-text">Already have an account? <i v-on:click="setStateToLogin()">Login here.</i></div>
+                </div>
+            </div>
+
+            <!-- =========== SCHEDULE =========== -->
+
+            <div id="schedule-screen" v-if="!state.showLoginScreen">
+
+                <!-- =========== NAVBAR =========== -->
+
+                <div id="schedule-navbar">
+                    <div id="schedule-selection-area">
+                        <select v-model="selectedSchedule" @change="scheduleSelectionChange($event)" v-bind:class="{ 'public-option' : getSelectedSchedule.public, 'private-option' : !getSelectedSchedule.public }" id="schedule-selection">
+                            <option>------</option>
+                            <option v-for="schedule in schedules" v-bind:class="{ 'public-option' : schedule.public, 'private-option' : !schedule.public }">{{ getPrivateOrPublicText(schedule) }} {{ schedule.schedule_name }}</option>
+                        </select>
+                    <div id="buttons-div">
+                            <button id="new-schedule-button" v-on:click="createNewScheduleButton()" class="schedule-button">New</button>
+                            <button id="load-schedule-button" v-on:click="loadScheduleButton()" v-bind:disabled="!state.validScheduleOption" class="schedule-button">Load</button>
+                            <button id="delete-schedule-button" v-on:click="deleteScheduleButton()" v-bind:disabled="!state.validScheduleOption" class="schedule-button">Delete</button>
+                        </div>
+                    </div>
+                    <div id="schedule-header">Schedule Master</div> 
+                    <div id="nav-account-area">
+                        <div id="account">Logged in as {{ user.email }}</div>
+                        <div><a id="log-out" v-on:click="logOutButton()">Log Out</a></div>
+                    </div>
+                </div>
+
+                <!-- =========== EMPLOYEES =========== -->
+
+                <div id="employee-area">
+                    <select id="employee-selection" v-model="selectedEmployee" v-on:change="employeeSelectionChange($event)" v-bind:disabled="!state.showSchedule">
+                        <option>------</option>
+                        <option v-for="employee in employees">{{ employee.name }}</option>
+                        <option>REMOVE HOUR</option>
+                    </select>
+                    <div id="total-hours" class="employee-information">Total Hours: {{ currentEmployee.totalHours }}</div>
+                    <div id="requested-hours" class="employee-information">Req Hours: {{ currentEmployee.reqHours }}</div>
+                    <div id="color-code" class="employee-information">Color: {{ currentEmployee.color }}</div>
+                    <button class="employee-button" id="add-employee-button" v-on:click="createNewEmployeeClick" v-bind:disabled="!state.showSchedule || !ownership">Add</button>
+                    <button class="employee-button" id="edit-employee-button" v-on:click="editEmployeeClick" v-bind:disabled="!currentEmployee.validEmployeeSelected || !ownership">Edit</button>
+                    <button class="employee-button" id="delete-employee-button" v-on:click="deleteEmployeeClick" v-bind:disabled="!currentEmployee.validEmployeeSelected || !ownership">Delete</button>
+                </div>
+
+                <div id="new-employee-form-area" v-if="state.showEmployeeForm"> 
+                    Employee Form <br><br>
+                    Name: <input id="employee-name-input" class="employee-input" v-model="newEmployee.name" placeholder="John Doe">
+                    <br>
+                    Color: <input id="employee-color-input" class="employee-input" v-model="newEmployee.color" placeholder="#2288AA">
+                    <div style="font-size: .7rem;">Leave blank to use a default color</div>
+                    <br>
+                    Requested Hours: <input id="employee-color-input" class="employee-input" v-model="newEmployee.reqHours" placeholder="20">
+                    <br><button v-bind:disabled="!newEmployee.name || !(newEmployee.reqHours)" v-on:click="saveEmployeeClick">Save Employee</button>
+                </div>
+
+                <div id="left-ownership-block" v-show="state.showSchedule && !ownership"></div>
+                <div id="right-ownership-block" v-show="state.showSchedule && !ownership"></div>
+
+                <!-- =========== AVAILABILITY =========== -->
+
+                
+                <!-- <div id="availability-area">
+                    <select id="availability-selection" v-bind:disabled="!state.showSchedule">
+                        <option>Availability_1</option>
+                    </select>
+                    <button class="availability-button" id="add-availability-button" v-bind:disabled="!state.showSchedule">Add</button>
+                    <button class="availability-button" id="edit-availability-button" v-bind:disabled="!state.showSchedule">Edit</button>
+                    <button class="availability-button" id="delete-availability-button" v-bind:disabled="!state.showSchedule">Delete</button>
+                    <button id="show-availability-button" v-bind:disabled="!state.showSchedule">Show Availability</button>
+                </div> -->
+
+                <!-- =========== SCHEDULE BODY =========== -->
+
+                <div id="schedule-area" v-if="state.showSchedule" oncontextmenu="return false;">
+                    <input id="schedule-header" v-model="state.loadedScheduleName">
+                    <div id="schedule" v-bind:style="{ gridTemplateRows: scheduleStyle['grid-template-rows'], gridTemplateColumns: scheduleStyle['grid-template-columns'] }">
+                        <div class="header-time header-day"></div>
+                        <div class="header-day" v-for="day in days" v-bind:class="day['day_id']">{{ getDayName(day) }}</div>
+                        <div class="header-time" v-bind:style="row.style" v-for="row in rowHeaders">{{ row.display }}</div>
+                        <div v-for="half_hour in half_hours" v-on:mousedown="updateWorkOnClickDown(half_hour, $event)" v-on:mouseover="updateWorkOnHover(half_hour)" v-bind:style="getHalfHourStyle(half_hour)" v-bind:class="{ 'removed-half-hour' : isHalfHourRemoved(half_hour)}" class="half-hour-div">{{ getEmployeeName(half_hour) }}</div>
+                    </div>
+                    <button id="save-schedule-button" v-on:click="onScheduleSaveClick" v-bind:disabled="!ownership">Save Schedule</button>
+                </div>
+
+                <!-- =========== SCHEDULE TABS =========== -->
+
+                <!-- <div id="schedule-tabs-area" v-if="state.showSchedule">
+                    <div class="schedule-tab" v-for="week in weeks">{{ week["week_name"] }}</div>
+                </div> -->
+
+                <!-- =========== BLANK SCHEDULE STUFF =========== -->
+
+                <div id="blank-schedule-area" v-if="state.showBlankScheduleScreen || state.showNewScheduleForm || state.showEmployeeForm" v-on:click="exitForm"></div>
+
+                <!-- =========== NEW SCHEDULE STUFF =========== -->
+
+                <div id="new-page-form-div" v-if="state.showNewScheduleForm" v-on:keydown.esc="exitNewScheduleForm">
+                    <div id="new-page-form">
+                        <div id="form-label-days" class="form-label">Check the days that will be worked.*</div>
+                        <div id="form-label-hours" class="form-label">Select opening and closing hours.*</div>
+                        <div id="form-label-name" class="form-label">Enter a schedule name.*</div>
+                        <div id="form-input-check-area" class="form-input">
+                            <!-- v-on:click="loadScheduleButton()" -->
+                            <div v-for="day in newSchedule.week" class="check-box-div">
+                                <input type="checkbox" class="check-box" v-model="day.selected">
+                                <label class="check-box-label" v-on:click="checkBoxLabelClick(day)">{{ day.name }}</label>
+                            </div>
+                        </div>
+                        <div id="form-input-hours-area" class="form-input">
+                            <select id="open-hour-select" v-model="newSchedule.openHour">
+                                <option v-for="hour in openTimeOptions" class="hour-option">{{ hour }}</option>
+                            </select>
+                            <div id="hour-divider-p">till</div>
+                            <select id="close-hour-select" v-model="newSchedule.closeHour">
+                                <option v-for="hour in closeTimeOptions" class="hour-option">{{ hour }}</option>
+                            </select>
+                        </div>
+                        <div id="form-input-name-area" class="form-input">
+                            <input id="name-input" v-model="newSchedule.name" placeholder="Schedule01" v-bind:class="scheduleNameInputClasses" v-on:keydown.enter="finishCreateButton">
+                            <div v-if="scheduleNameError" id="schedule-name-error">{{ scheduleNameError }}</div>
+                        </div>
+                        <div id="form-input-public-area" class="">
+                            Public?<input id="public-input" type="checkbox" v-model="newSchedule.public">
+                        </div>
+                        <button id="form-submit-button" v-bind:disabled="!canCreateNewSchedule" v-on:click="finishCreateButton">Create Schedule</button>
+                    </div>
+                    <div id="new-page-form-header">New Schedule</div>
+                </div>
+                <div id="delete-error-notification" v-show="showDeleteError" v-bind:style="deleteErrorStyle">{{ deleteErrorText }}</div>
+                <div id="save-notification" v-show="showSaveNotification" v-bind:style="notificationStyle">Save Complete!</div>
+            </div>
+        </div>
+        <script src="https://cdn.jsdelivr.net/npm/vue@2.6.14/dist/vue.js"></script>
+        <script src="app.js"></script>
+    </body>
+</html>
